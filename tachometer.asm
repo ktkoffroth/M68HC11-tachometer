@@ -1,11 +1,25 @@
-;Init variables
+;Init Ports/Addresses
 PORTA0 EQU $1014 ; PA0 Address, Input Capture Register 0
 TCTL2 EQU $1021 ; Timer Control Register
 TMSK1 EQU $1022 ; Timer Interrupt Mask Register
 TFLG1 EQU $1023 ; Timer Interrupt Flag Register
+ASCII EQU 30 ; 
+
+; Init Constants
+RPMCOUNT EQU 32 ; RPM Sum Count (used for sum loop and average)
+
+; Init Variables
 T2 FCB $00, $00 ; Previous PA0 value
 T1 FCB $00, $00 ; Current PA0 value
 PWIDTH FCB $00, $00 ; Calculated Pulse Width
+RPMVALUE FCB $00, $00 ; Calculated RPM
+RPMSUM FCB $00, $00 ; Rolling RPM Sum
+RPMAV FCB $00, $00 ; Calculated Average RPM
+NUMBERS FCB $30, $31, $32,
+            $33, $34, $35,
+            $36, $37, $38
+            $39
+
 
 ; Store JMP to interrupt handler at pseudo-vector for IC3
 	ORG $00E2
@@ -17,8 +31,10 @@ PWIDTH FCB $00, $00 ; Calculated Pulse Width
 ;both the I bit has to be cleared and local mask bit has to be set for interrupt to occur, set up during iniitialization
 IC3INIT:
 	CLI ;I bit cleared
-	LDAA #1
-	STAA TMSK1 ;local mask bit has to be set
+	LDAA #1 ;local mask bit has to be set
+	STAA TMSK1
+    LDAA #1 ; Clear interrupt flag (active low)
+    STAA TFLG1
 
 MAIN:
     JSR SENSOR; Calculate RPM
@@ -31,7 +47,7 @@ MAIN:
 SENSOR:
         WAI ; Wait for next Interrupt Signal
         JSR PWIDTH ; Calculate PWIDTH
-
+        JSR RPM ; Calculate RPM
         RTS ; 
 
 ; KEYPAD main subroutine
@@ -59,7 +75,7 @@ RECALC:
 
 ; Calculate RPM Subroutine
 RPM: 
-    
+
 
 ; Interupt Handler, Simply Capture T1
 CAPTURE:
