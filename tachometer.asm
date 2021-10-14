@@ -46,10 +46,10 @@ PREVPRESSED FCB $00 ; Previous value of pressed (last time it was checked)
 ;both the I bit has to be cleared and local mask bit has to be set for interrupt to occur, set up during iniitialization
 IC3INIT:
 	CLI ;I bit cleared
-	LDAA #1 ;local mask bit has to be set
-	STAA TMSK1
-    LDAA #1 ; Clear interrupt flag (active low)
-    STAA TFLG1
+	LDAA #1
+        STAA TCTL2 ; Setup to capture on rising edges
+	STAA TMSK1 ; local mask bit has to be set
+        STAA TFLG1 ; Clear interrupt flag (active low)
 
 MAIN:
     JSR SENSOR ; Calculate RPMAV
