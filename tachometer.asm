@@ -9,6 +9,7 @@ PORTGDDR EQU $2202 ; Port G DDR Address
 ;Init Utility Subroutines
 OUTSTRG EQU $FFC7 ; string output Utility Subroutine
 OUTA    EQU $FFB8 ; char output Utility Subroutine
+RHLF    EQU $FFB5 ; bin to ASCII from AA
 
 ; Init Constants
 DELAY EQU 3333 ; Keypad debounce
@@ -36,8 +37,8 @@ PREVPRESSED FCB $00 ; Previous value of pressed (last time it was checked)
 
 
 ; Store JMP to interrupt handler at pseudo-vector for IC3
-	ORG $00E2
-	JMP  CAPTURE ; Jump to our Interrupt Handler
+        ORG $00E2
+        JMP  CAPTURE ; Jump to our Interrupt Handler
 
 ; Main Program Entry
         ORG $D000
@@ -45,20 +46,22 @@ PREVPRESSED FCB $00 ; Previous value of pressed (last time it was checked)
 
 ;both the I bit has to be cleared and local mask bit has to be set for interrupt to occur, set up during iniitialization
 IC3INIT:
-	CLI ;I bit cleared
-	LDAA #1
+        CLI ;I bit cleared
+        LDAA #1
         STAA TCTL2 ; Setup to capture on rising edges
-	STAA TMSK1 ; local mask bit has to be set
+        LDAA #1
+        STAA TMSK1 ; local mask bit has to be set
+        LDAA #1
         STAA TFLG1 ; Clear interrupt flag (active low)
 
 MAIN:
-    JSR SENSOR ; Calculate RPMAV
     JSR KEYPAD ; Set PRESSED to 1 if any key pressed
-
-    LDAA PRESSED ; if (pressed && !prevpressed)
-    LDAB PREVPRESSED 
+    JSR SENSOR ; Calculate RPMAV
+    LDY NUMBERS
+    LDAB PREVPRESSED
     EORB #$FF
     STAB PREVPRESSED
+    LDAA PRESSED
     ANDA PREVPRESSED
     BEQ RPMSKIP ; branch if A is zero (condition failed)
     JSR PRINT ; Print AVRPM to screen
@@ -99,7 +102,8 @@ KEYPAD:
         JSR POLLKEYPAD ; Poll the keypad
         LDX #KEYTABLE
         LDAB #16
-        CLR PRESSED ; Make sure Pressed is zero
+        lDAA #0
+        STAA PRESSED ; Make sure Pressed is zero
 
 ; Check KEYTABLE [0 - 15]
 CHECKKEYTABLE:
@@ -112,7 +116,6 @@ PRINTSKIP:
         INX ; increment X to check next position
         DECB
         BNE CHECKKEYTABLE
-
         RTS ; Return
 
 ; Helper Subroutines
@@ -121,14 +124,14 @@ PRINTSKIP:
 CALCPWIDTH: 
         LDD T1
         SUBD T2 ; PWIDTH = T1 - T2
-	    BMI RECALC ; if T2 > T1
+        BMI RECALC ; if T2 > T1
 UPDATE:
-	    STD PWIDTH ; else, store to PWIDTH
-        LDX T1 ; and update T2
-	    STX T2
+        STD PWIDTH ; else, store to PWIDTH
+        LDD T1 ; and update T2
+        STD T2
         RTS ; 
 RECALC:
-	    LDD #$FFFF ; recalculate with PWIDTH = FFFF - T2 + T1
+        LDD #$FFFF ; recalculate with PWIDTH = FFFF - T2 + T1
         SUBD T2
         ADDD T1
         BRA UPDATE ; Go back to update PWIDTH and T2
@@ -182,34 +185,25 @@ COLUMN:
         STAA PORTG
         PSHX           ; Save POLLTABLE pointer, Need X
 ROW:
-        LDAA #$10       ; Bit Mask 0b00010000
-        ANDA PORTG      ; Check first Row Bit
-        LSRA            ; Shift the bit to b0
-        LSRA
-        LSRA
-        LSRA
-        EORA #$FF       ; Flip A (0 is pressed normally, we want 1 to be pressed)
-        CMPA 0,Y        ; compare A with KEYTABLE
-        BEQ SKIP1       ; Skip if input is same as KEYTABLE
-        STAA 0,Y        ; Store A to KEYTABLE
+        LDAA #0        ; Set value in KEYTABLE to 0 by default
+        STAA 0,Y
+        LDAA #$10  ; Bit Mask 0b00010000
+        ANDA PORTG ; Check first Row Bit
+        BNE SKIP1  ; Skip if input is non-zero (no press) yu
+        INC 0,Y         ; increment button value in KEYTABLE
         LDX #DELAY      ; Setup DELAY for debounce
 
-DELAY1:
+DELAY1:                 ; Debouce Loop
        DEX
        BNE DELAY1
 SKIP1:
        INY        ; Move KEYTABLE pointer to next row
+       LDAA #0
+       STAA 0,Y
        LDAA #$20  ; Bit Mask 0b00100000
-       ANDA PORTG ; Check first Row Bit
-       LSRA       ; Shift the bit to b0
-       LSRA
-       LSRA
-       LSRA
-       LSRA
-       EORA #$FF       ; Flip A (0 is pressed normally, we want 1 to be pressed)
-       CMPA 0,Y        ; compare A with KEYTABLE
-       BEQ SKIP2       ; Skip if input is non-zero (no press)
-       STAA 0,Y        ; Store A to KEYTABLE
+        ANDA PORTG ; Check first Row Bit
+        BNE SKIP2  ; Skip if input is non-zero (no press)
+       INC 0,Y
        LDX #DELAY
 
 DELAY2:
@@ -218,18 +212,12 @@ DELAY2:
 
 SKIP2:
        INY
-       LDAA #$40 ; Bit Mask 0b01000000
-       ANDA PORTG ; Check first Row Bit
-       LSRA       ; Shift the bit to b0
-       LSRA
-       LSRA
-       LSRA
-       LSRA
-       LSRA
-       EORA #$FF       ; Flip A (0 is pressed normally, we want 1 to be pressed)
-       CMPA 0,Y        ; compare A with KEYTABLE              
-       BEQ SKIP3  ; Skip if input is non-zero (no press)
+       LDAA #0
        STAA 0,Y
+       LDAA #$40 ; Bit Mask 0b01000000
+        ANDA PORTG ; Check first Row Bit
+        BNE SKIP3  ; Skip if input is non-zero (no press)
+       INC 0,Y
        LDX #DELAY
 
 DELAY3:
@@ -238,25 +226,18 @@ DELAY3:
 
 SKIP3:
        INY
-       LDAA #$80 ; Bit Mask 0b10000000
-       ANDA PORTG ; Check first Row Bit
-       LSRA       ; Shift the bit to b0
-       LSRA
-       LSRA
-       LSRA
-       LSRA
-       LSRA
-       LSRA
-       EORA #$FF       ; Flip A (0 is pressed normally, we want 1 to be pressed)
-       CMPA 0,Y        ; compare A with KEYTABLE       
-       BEQ SKIP4  ; Skip if input is non-zero (no press)
+       LDAA #0
        STAA 0,Y
+       LDAA #$80 ; Bit Mask 0b10000000
+        ANDA PORTG ; Check first Row Bit
+        BNE SKIP4  ; Skip if input is non-zero (no press)
+       INC 0,Y
        LDX #DELAY
 
 DELAY4:
        DEX
        BNE DELAY4
-       
+
 SKIP4:
         INY ; increment Y, setup KEYTABLE pointer
             ; for next loop iteration
