@@ -1,5 +1,7 @@
+        ORG $D500
+
 ;Init Ports/Addresses
-PORTA0 EQU $1014 ; PA0 Address, Input Capture Register 0
+TIC3 EQU $1014 ; PA0 Address, Input Capture Register 0
 TCTL2 EQU $1021 ; Timer Control Register
 TMSK1 EQU $1022 ; Timer Interrupt Mask Register
 TFLG1 EQU $1023 ; Timer Interrupt Flag Register
@@ -9,6 +11,7 @@ PORTGDDR EQU $2202 ; Port G DDR Address
 ;Init Utility Subroutines
 OUTSTRG EQU $FFC7 ; string output Utility Subroutine
 OUTA    EQU $FFB8 ; char output Utility Subroutine
+OUTCRL  EQU $FFC4 ; output carriage return
 RHLF    EQU $FFB5 ; bin to ASCII from AA
 
 ; Init Constants
@@ -19,12 +22,7 @@ RPMMSG FCC "Average RPM: " ; Store Message
 POLLTABLE FCB $FE,$FD,$FB,$F7 ; PORTG polling values
 
 ; Init Variables
-        ORG $8000 ; Allocate in Writeable Region
-        
-KEYTABLE FCB $00,$00,$00,$00  ; first 16 bytes are the key values
-         FCB $00,$00,$00,$00
-         FCB $00,$00,$00,$00
-         FCB $00,$00,$00,$00
+KEYTABLE RMB 16 ; Reserve 16 Bytes for Keypad Buttons
 T2 RMB 2 ; Previous PA0 value
 T1 RMB 2 ; Current PA0 value
 PWIDTH RMB 2 ; Calculated Pulse Width
@@ -42,7 +40,7 @@ PREVPRESSED RMB 1 ; Previous value of pressed (last time it was checked)
 
 ; Main Program Entry
         ORG $D000
-        LDS #$D500 ; Init SP
+        LDS #$D800 ; Init SP
 
 ;both the I bit has to be cleared and local mask bit has to be set for interrupt to occur, set up during iniitialization
 IC3INIT:
@@ -76,6 +74,7 @@ RPMSKIP:
 SENSOR:
         WAI ; Wait for next Interrupt Signal
         JSR CALCPWIDTH ; Calculate PWIDTH
+        JSR PRINTPWIDTH ; Print PWIDTH for Validation
         JSR RPM ; Calculate RPM
         
         LDD RPMSUM ; Add RPM to running sum
@@ -152,7 +151,6 @@ PRINT:
         LDX #1000 ; bin to decimal conversion
         LDD RPMAV
 ; Calculate remainder and use RHLF subroutine to output it to screen
-REMAINDER:
         IDIV ; Value in X, remainder in D
         XGDX
         TBA ; Print Character
@@ -176,6 +174,42 @@ REMAINDER:
         JSR RHLF
         RTS ; Return
 
+; Convert PWIDTH Value to ASCII and print to Buffalo Terminal (PRINT Subroutine)
+PRINTPWIDTH:
+        LDX #10000 ; bin to decimal conversion
+        LDD PWIDTH
+; Calculate remainder and use RHLF subroutine to output it to screen
+        IDIV ; Value in X, remainder in D
+        XGDX
+        TBA ; Print Character
+        JSR RHLF
+        CLRA ; Reset A to not mess with D
+        XGDX
+        LDX #1000 ; Reload X with 10
+        IDIV
+        XGDX
+        TBA
+        JSR RHLF
+        CLRA
+        XGDX
+        LDX #100
+        IDIV
+        XGDX
+        TBA
+        JSR RHLF
+        CLRA
+        XGDX
+        LDX #10
+        IDIV
+        XGDX
+        TBA
+        JSR RHLF
+        XGDX
+        TBA
+        JSR RHLF
+        JSR OUTCRL ; newline
+        RTS ; Return
+
 ; POLL KEYPAD SUBROUTINE
 POLLKEYPAD:
         LDAA #$0F   ;SET PORT G
@@ -195,8 +229,8 @@ ROW:
         BNE SKIP1  ; Skip if input is non-zero (no press) yu
         INC 0,Y         ; increment button value in KEYTABLE
         LDX #DELAY      ; Setup DELAY for debounce
-
-DELAY1:                 ; Debouce Loop
+; Debouce Loop
+DELAY1:
        DEX
        BNE DELAY1
 SKIP1:
@@ -255,7 +289,7 @@ SKIP4:
 
 ; Interupt Handler, Simply Capture T1
 CAPTURE:
-        LDD PORTA0 ; Load to X for setting T1
+        LDD TIC3 ; Load to X for setting T1
         STD T1
         LDAA #1 ; Clear interrupt flag (active low)
         STAA TFLG1
