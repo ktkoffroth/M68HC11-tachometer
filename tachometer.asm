@@ -152,24 +152,16 @@ PRINT:
         JSR OUTSTRG ; Print RPMMSG onto Buffalo Terminal
         LDX #10 ; bin to decimal conversion
         LDD RPMAV
-; Calculate remainder and push it's ASCII to the stack
+; Calculate remainder and use RHLF subroutine to output it to screen
 REMAINDER:
-        LDY NUMBERS
-        IDIV ; Value in X, remainder in D
-        ABY ; Move to Correct ASCII Character
-        LDAB 0,Y ; Load ASCII Character
-        PSHB ; Push the ASCII to the Stack
-        INC COUNT ; Increment Character Count
+        IDIV ; Value in X, remainder in D       
+        TBA ; Print Character
+        JSR RHLF
+        CLRA ; Reset A to not mess with D
         XGDX
+        LDX #10 ; Reload X with 10
         CPD #0
-        BNE REMAINDER
-; Display ASCII from stack
-DISPLAY:
-        PULA
-        JSR OUTA ; Print Character
-        DEC COUNT
-        BNE DISPLAY
-        CLR COUNT ; Reset COUNT variable to zero
+        BNE REMAINDER ; Branch until the value is zero
 
         RTS ; Return
 
