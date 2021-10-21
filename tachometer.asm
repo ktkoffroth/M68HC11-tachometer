@@ -14,26 +14,26 @@ RHLF    EQU $FFB5 ; bin to ASCII from AA
 ; Init Constants
 DELAY EQU 3333 ; Keypad debounce
 RPMCOUNT EQU 32 ; RPM Sum Count (used for sum loop and average)
-NUMBERS FCB $30,$31,$32,$33,$34,$35,$36,$37,$38,$39 ; 0-9 ASCII Representation
 RPMMSG FCC "Average RPM: " ; Store Message
        FCB $04
 POLLTABLE FCB $FE,$FD,$FB,$F7 ; PORTG polling values
-KEYTABLE FCB $00,$00,$00,$00  ; first 16 bytes are the key values
-         FCB $00,$00,$00,$00  
-         FCB $00,$00,$00,$00
-         FCB $00,$00,$00,$00
-
 
 ; Init Variables
-T2 FCB $00,$00 ; Previous PA0 value
-T1 FCB $00,$00 ; Current PA0 value
-PWIDTH FCB $00,$00 ; Calculated Pulse Width
-RPMVALUE FCB $00,$00 ; Calculated RPM
-RPMSUM FCB $00,$00 ; Rolling RPM Sum
-COUNT FCB $00 ; counter variable used in multiple places
-RPMAV FCB $00,$00 ; Calculated Average RPM
-PRESSED FCB $00 ; Bool: if any key is pressed - true
-PREVPRESSED FCB $00 ; Previous value of pressed (last time it was checked)
+        ORG $8000 ; Allocate in Writeable Region
+        
+KEYTABLE FCB $00,$00,$00,$00  ; first 16 bytes are the key values
+         FCB $00,$00,$00,$00
+         FCB $00,$00,$00,$00
+         FCB $00,$00,$00,$00
+T2 RMB 2 ; Previous PA0 value
+T1 RMB 2 ; Current PA0 value
+PWIDTH RMB 2 ; Calculated Pulse Width
+RPMVALUE RMB 2 ; Calculated RPM
+RPMSUM RMB 2 ; Rolling RPM Sum
+COUNT RMB 1 ; counter variable used in multiple places
+RPMAV RMB 2 ; Calculated Average RPM
+PRESSED RMB 1 ; Bool: if any key is pressed - true
+PREVPRESSED RMB 1 ; Previous value of pressed (last time it was checked)
 
 
 ; Store JMP to interrupt handler at pseudo-vector for IC3
@@ -57,7 +57,6 @@ IC3INIT:
 MAIN:
     JSR KEYPAD ; Set PRESSED to 1 if any key pressed
     JSR SENSOR ; Calculate RPMAV
-    LDY NUMBERS
     LDAB PREVPRESSED
     EORB #$FF
     STAB PREVPRESSED
@@ -122,14 +121,14 @@ PRINTSKIP:
 
 ; Calculate PWIDTH Subroutine
 CALCPWIDTH: 
-        LDD T1
-        SUBD T2 ; PWIDTH = T1 - T2
-        BMI RECALC ; if T2 > T1
+        LDD T2
+        SUBD T1 ; PWIDTH = T2 - T1
+        BMI RECALC ; if T1 > T2
 UPDATE:
         STD PWIDTH ; else, store to PWIDTH
         LDD T1 ; and update T2
         STD T2
-        RTS ; 
+        RTS
 RECALC:
         LDD #$FFFF ; recalculate with PWIDTH = FFFF - T2 + T1
         SUBD T2
@@ -150,19 +149,31 @@ RPM:
 PRINT:
         LDX #RPMMSG
         JSR OUTSTRG ; Print RPMMSG onto Buffalo Terminal
-        LDX #10 ; bin to decimal conversion
+        LDX #1000 ; bin to decimal conversion
         LDD RPMAV
 ; Calculate remainder and use RHLF subroutine to output it to screen
 REMAINDER:
-        IDIV ; Value in X, remainder in D       
+        IDIV ; Value in X, remainder in D
+        XGDX
         TBA ; Print Character
         JSR RHLF
         CLRA ; Reset A to not mess with D
         XGDX
-        LDX #10 ; Reload X with 10
-        CPD #0
-        BNE REMAINDER ; Branch until the value is zero
-
+        LDX #100 ; Reload X with 10
+        IDIV
+        XGDX
+        TBA
+        JSR RHLF
+        CLRA
+        XGDX
+        LDX #10
+        IDIV
+        XGDX
+        TBA
+        JSR RHLF
+        XGDX
+        TBA
+        JSR RHLF
         RTS ; Return
 
 ; POLL KEYPAD SUBROUTINE
