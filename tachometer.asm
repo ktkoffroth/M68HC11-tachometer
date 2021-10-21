@@ -73,8 +73,6 @@ RPMSKIP:
 ; SENSOR main subroutine
 SENSOR:
         WAI ; Wait for next Interrupt Signal
-        JSR CALCPWIDTH ; Calculate PWIDTH
-        JSR PRINTPWIDTH ; Print PWIDTH for Validation
         JSR RPM ; Calculate RPM
         
         LDD RPMSUM ; Add RPM to running sum
@@ -125,13 +123,11 @@ CALCPWIDTH:
         BMI RECALC ; if T1 > T2
 UPDATE:
         STD PWIDTH ; else, store to PWIDTH
-        LDD T1 ; and update T2
-        STD T2
         RTS
 RECALC:
-        LDD #$FFFF ; recalculate with PWIDTH = FFFF - T2 + T1
-        SUBD T2
-        ADDD T1
+        LDD #$FFFF ; recalculate with PWIDTH = FFFF - T1 + T2
+        SUBD T1
+        ADDD T2
         BRA UPDATE ; Go back to update PWIDTH and T2
 
 ; Calculate RPM Subroutine
@@ -172,42 +168,6 @@ PRINT:
         XGDX
         TBA
         JSR RHLF
-        RTS ; Return
-
-; Convert PWIDTH Value to ASCII and print to Buffalo Terminal (PRINT Subroutine)
-PRINTPWIDTH:
-        LDX #10000 ; bin to decimal conversion
-        LDD PWIDTH
-; Calculate remainder and use RHLF subroutine to output it to screen
-        IDIV ; Value in X, remainder in D
-        XGDX
-        TBA ; Print Character
-        JSR RHLF
-        CLRA ; Reset A to not mess with D
-        XGDX
-        LDX #1000 ; Reload X with 10
-        IDIV
-        XGDX
-        TBA
-        JSR RHLF
-        CLRA
-        XGDX
-        LDX #100
-        IDIV
-        XGDX
-        TBA
-        JSR RHLF
-        CLRA
-        XGDX
-        LDX #10
-        IDIV
-        XGDX
-        TBA
-        JSR RHLF
-        XGDX
-        TBA
-        JSR RHLF
-        JSR OUTCRL ; newline
         RTS ; Return
 
 ; POLL KEYPAD SUBROUTINE
@@ -289,8 +249,11 @@ SKIP4:
 
 ; Interupt Handler, Simply Capture T1
 CAPTURE:
-        LDD TIC3 ; Load to X for setting T1
+        LDD T2 ; Update T1
         STD T1
+        LDD TIC3 ; Load to X for setting T1
+        STD T2
+        JSR CALCPWIDTH ; Calculate PWIDTH
         LDAA #1 ; Clear interrupt flag (active low)
         STAA TFLG1
         RTI ; Return
