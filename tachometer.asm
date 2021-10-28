@@ -5,7 +5,7 @@ TIC3 EQU $1014 ; PA0 Address, Input Capture Register 0
 TCTL2 EQU $1021 ; Timer Control Register
 TMSK1 EQU $1022 ; Timer Interrupt Mask Register
 TFLG1 EQU $1023 ; Timer Interrupt Flag Register
-PORTG EQU $2200 ; Port G Address 
+PORTG EQU $2200 ; Port G Address
 PORTGDDR EQU $2202 ; Port G DDR Address
 
 ;Init Utility Subroutines
@@ -16,7 +16,6 @@ RHLF    EQU $FFB5 ; bin to ASCII from AA
 
 ; Init Constants
 DELAY EQU 3333 ; Keypad debounce
-RPMCOUNT EQU 32 ; RPM Sum Count (used for sum loop and average)
 RPMMSG FCC "Average RPM: " ; Store Message
        FCB $04
 POLLTABLE FCB $FE,$FD,$FB,$F7 ; PORTG polling values
@@ -28,7 +27,7 @@ T1 RMB 2 ; Current PA0 value
 PWIDTH RMB 2 ; Calculated Pulse Width
 RPMVALUE RMB 2 ; Calculated RPM
 RPMSUM RMB 2 ; Rolling RPM Sum
-COUNT RMB 1 ; counter variable used in multiple places
+COUNT FCB $20 ; counter variable used in multiple places
 RPMAV RMB 2 ; Calculated Average RPM
 PRESSED RMB 1 ; Bool: if any key is pressed - true
 PREVPRESSED RMB 1 ; Previous value of pressed (last time it was checked)
@@ -74,31 +73,34 @@ RPMSKIP:
 SENSOR:
         WAI ; Wait for next Interrupt Signal
         JSR RPM ; Calculate RPM
-        
+
         LDD RPMSUM ; Add RPM to running sum
         ADDD RPMVALUE
         STD RPMSUM
-        INC COUNT
-        LDAB RPMCOUNT
-        CMPB COUNT
+        LDAA COUNT ; Decrement Count Explicitly
+        SUBA #1
+        STAA COUNT
         BNE SENSOR ; Branch as long as the count has not reached 32
 
-        LDX RPMCOUNT ; When we've taken 32 sums, divide by 32 and put into RPMAV
+        LDX #32 ; When we've taken 32 sums, divide by 32 and put into RPMAV
         LDD RPMSUM
         IDIV
         STX RPMAV
 
-        CLR COUNT ; Reset COUNT variable to zero
+        LDAA #32
+        STAA COUNT ; Reset Count
+        LDD #0     ; and RPMSUM
+        STD RPMSUM
 
         RTS ; Return
 
 ; KEYPAD main subroutine
-KEYPAD: 
+KEYPAD:
 
         JSR POLLKEYPAD ; Poll the keypad
         LDX #KEYTABLE
         LDAB #16
-        lDAA #0
+        LDAA #0
         STAA PRESSED ; Make sure Pressed is zero
 
 ; Check KEYTABLE [0 - 15]
@@ -117,7 +119,7 @@ PRINTSKIP:
 ; Helper Subroutines
 
 ; Calculate PWIDTH Subroutine
-CALCPWIDTH: 
+CALCPWIDTH:
         LDD T2
         SUBD T1 ; PWIDTH = T2 - T1
         BMI RECALC ; if T1 > T2
@@ -128,14 +130,14 @@ RECALC:
         LDD #$FFFF ; recalculate with PWIDTH = FFFF - T1 + T2
         SUBD T1
         ADDD T2
-        BRA UPDATE ; Go back to update PWIDTH and T2
+        BRA UPDATE ; Go back to update PWIDTH
 
 ; Calculate RPM Subroutine
-RPM: 
+RPM:
         LDD PWIDTH ; Load Delta T
-        LDX #32 ; Common Factor Divide
+        LDX #31 ; Common Factor Divide
         IDIV
-        LDD #62500
+        LDD #64516
         IDIV ; Result in X
         STX RPMVALUE
         RTS
@@ -154,6 +156,43 @@ PRINT:
         CLRA ; Reset A to not mess with D
         XGDX
         LDX #100 ; Reload X with 10
+        IDIV
+        XGDX
+        TBA
+        JSR RHLF
+        CLRA
+        XGDX
+        LDX #10
+        IDIV
+        XGDX
+        TBA
+        JSR RHLF
+        XGDX
+        TBA
+        JSR RHLF
+        RTS ; Return
+
+; Convert RPM SUM Value to ASCII and print to Buffalo Terminal (PRINT Subroutine)
+PRINTSUM:
+        LDX #RPMMSG
+        JSR OUTSTRG ; Print RPMMSG onto Buffalo Terminal
+        LDX #10000 ; bin to decimal conversion
+        LDD RPMSUM
+; Calculate remainder and use RHLF subroutine to output it to screen
+        IDIV ; Value in X, remainder in D
+        XGDX
+        TBA ; Print Character
+        JSR RHLF
+        CLRA ; Reset A to not mess with D
+        XGDX
+        LDX #1000 ; Reload X with 10
+        IDIV
+        XGDX
+        TBA
+        JSR RHLF
+        CLRA
+        XGDX
+        LDX #100
         IDIV
         XGDX
         TBA
