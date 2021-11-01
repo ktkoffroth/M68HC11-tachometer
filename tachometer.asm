@@ -172,43 +172,6 @@ PRINT:
         JSR RHLF
         RTS ; Return
 
-; Convert RPM SUM Value to ASCII and print to Buffalo Terminal (PRINT Subroutine)
-PRINTSUM:
-        LDX #RPMMSG
-        JSR OUTSTRG ; Print RPMMSG onto Buffalo Terminal
-        LDX #10000 ; bin to decimal conversion
-        LDD RPMSUM
-; Calculate remainder and use RHLF subroutine to output it to screen
-        IDIV ; Value in X, remainder in D
-        XGDX
-        TBA ; Print Character
-        JSR RHLF
-        CLRA ; Reset A to not mess with D
-        XGDX
-        LDX #1000 ; Reload X with 10
-        IDIV
-        XGDX
-        TBA
-        JSR RHLF
-        CLRA
-        XGDX
-        LDX #100
-        IDIV
-        XGDX
-        TBA
-        JSR RHLF
-        CLRA
-        XGDX
-        LDX #10
-        IDIV
-        XGDX
-        TBA
-        JSR RHLF
-        XGDX
-        TBA
-        JSR RHLF
-        RTS ; Return
-
 ; POLL KEYPAD SUBROUTINE
 POLLKEYPAD:
         LDAA #$0F   ;SET PORT G
